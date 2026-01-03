@@ -1,0 +1,30 @@
+Resultados de ajuste stilbene 
+--------------------------------
+
+Canal   340.61 22Na 
+Amplitud: 166.707 ± 5.33424
+Media: -0.0562116 ± 0.00380692
+Sigma: -9212.3 ± 1.53209
+Slope: 20.646 ± 1.54916
+Intercept: nan ± 0
+
+Canal  1061.71 22Na 
+Amplitud: 30.209 ± 1.32466
+Media: -0.0544337 ± 0.00704486
+Sigma: -8589.17 ± 2.87646
+Slope: 4.5671 ± 0.725833
+Intercept: nan ± 0
+
+Canal  238Pu+13C 
+Amplitud: 8714 ± 1.32466
+Media: -0.133 ± 0.00704486
+Sigma: 241.6 ± 2.87646
+Slope: 1078.6 ± 0.725833
+Intercept: nan ± 0
+
+Canal 238Pu+13C-
+Amplitud: 1372 ± 1.32466
+Media: -56 ± 0.00704486
+Sigma: 502 ± 2.87646
+Slope: 185 ± 0.725833
+Intercept: nan ± 0

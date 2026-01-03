@@ -1,0 +1,260 @@
+@startuml
+' Force a more vertical / compact layout
+!pragma layout smetana
+top to bottom direction
+
+' fuerza paginación (ajusta tamaño a tu hoja)
+page 900x1200
+
+skinparam classAttributeIconSize 0
+skinparam packagePadding 4
+skinparam packageMargin 4
+skinparam classPadding 4
+skinparam nodesep 15
+skinparam ranksep 25
+
+
+' =========================
+' COLUMN 1: Core
+' =========================
+together {
+  package "domain" {
+   class Waveform {
+      +event_id: int
+      +path: str
+      +t_ns: np.ndarray
+      +v_mV: np.ndarray
+      +meta: dict
+    }
+
+    class ProcessedWaveform {
+      +raw: Waveform
+      +t_ns: np.ndarray
+      +v_mV: np.ndarray
+      +v_smooth_mV: np.ndarray
+      +derivative: np.ndarray
+    }
+
+    class WaveformFeatures {
+      +event_id: int
+      +path: str
+      +baseline_mV: float
+      +amplitude_mV: float
+      +t_min_ns: float
+      +t0_ns: float
+      +t10_ns: float
+      +t90_ns: float
+      +rise_time_ns: float
+      +t90_f_ns: float
+      +t10_f_ns: float
+      +fall_time_ns: float
+      +q_total: float
+      +q_tail: float
+      +psd: float
+      +valid: bool
+      +invalid_reason: str
+    }
+
+    class ValidationResult {
+      +passed: bool
+      +reason: str
+    }
+  }
+
+  package "interfaces (Protocols)" {
+    interface IWaveformLoader {
+      +load(event_id: int, path: str): Waveform
+    }
+
+    interface IPreprocessor {
+      +process(w: Waveform): ProcessedWaveform
+    }
+
+    interface IOnsetDetector {
+      +detect(pw: ProcessedWaveform): float?
+    }
+
+    interface ICrossingTimeEstimator {
+      +crossing_time(t: np.ndarray, v: np.ndarray, target: float): float?
+    }
+
+    interface IIntegrator {
+      +integrate(t: np.ndarray, v: np.ndarray): float
+    }
+
+    interface IFeatureExtractor {
+      +extract(pw: ProcessedWaveform): WaveformFeatures
+    }
+
+    interface IQualityGate {
+      +check(pw: ProcessedWaveform, feat: WaveformFeatures): ValidationResult
+    }
+  }
+}
+
+' =========================
+' COLUMN 2: Processing
+' =========================
+together {
+  package "io" {
+    class CSVWaveformLoader {
+      +header: int
+      +col_t: str
+      +col_v: str
+      +load(event_id: int, path: str): Waveform
+    }
+
+    class read_path_list <<function>> {
+      +read_path_list(txt_path: str): List[str]
+    }
+  }
+
+  package "preprocess" {
+    class StilbenePreprocessor {
+      +smooth_window: int
+      +process(w: Waveform): ProcessedWaveform
+    }
+  }
+
+  package "features" {
+    class DerivativeOnsetDetector {
+      +min_puntos_negativos: int
+      +factor_umbral: float
+      +detect(pw: ProcessedWaveform): float?
+    }
+
+    class LinearInterpolationCrossingEstimator {
+      +crossing_time(t: np.ndarray, v: np.ndarray, target: float): float?
+    }
+
+    class TrapezoidalIntegrator {
+      +integrate(t: np.ndarray, v: np.ndarray): float
+    }
+
+    class StilbeneFeatureExtractor {
+      -onset_detector: IOnsetDetector
+      -crossing: ICrossingTimeEstimator
+      -integrator: IIntegrator
+      +extract(pw: ProcessedWaveform): WaveformFeatures
+    }
+  }
+
+  package "pipeline" {
+    class BasicQualityGate {
+      +min_amplitude_mV: float
+      +check(pw: ProcessedWaveform, feat: WaveformFeatures): ValidationResult
+    }
+
+    class ProcessingPipeline {
+      -loader: IWaveformLoader
+      -preprocessor: IPreprocessor
+      -extractor: IFeatureExtractor
+      -gate: IQualityGate
+      +run(paths: List[str]): (DataFrame good, DataFrame bad)
+    }
+  }
+}
+
+' =========================
+' COLUMN 3: ML + Viz + Scripts
+' =========================
+together {
+  package "ml" {
+    class KMeansClusteringResult {
+      +labels: np.ndarray
+      +scaler: StandardScaler
+      +model: KMeans
+      +X_scaled: np.ndarray
+    }
+
+    class KMeansClusterer {
+      +random_state: int
+      +n_init: int
+      +fit_predict(X: DataFrame, n_clusters: int): KMeansClusteringResult
+    }
+
+    class ModelSelector {
+      +random_state: int
+      +n_init: int
+      +elbow_inertias(X_scaled: np.ndarray, k_range: range): List[float]
+      +silhouettes(X_scaled: np.ndarray, ks: Iterable[int]): Dict[int, float]
+    }
+  }
+
+  package "viz" {
+    class ClusteringPlotter {
+      +plot_elbow(k_range: range, inertias: List[float]): void
+      +plot_scatter(df: DataFrame, xcol: str, ycol: str, label_col: str): void
+    }
+
+    class WaveformPlotter {
+      +plot_event(...): void
+    }
+  }
+
+  package "scripts / runners" {
+    class run_pipeline_py <<script>> {
+      +main(): void
+      +generates: features_good.csv, features_bad.csv
+    }
+
+    class parallel_run_py <<script>> {
+      +process_one(event_id: int, path: str): Dict
+      +run_parallel(paths: List[str], max_workers: int?): (DataFrame good, DataFrame bad)
+      +main(): void
+      +generates: features_good.csv, features_bad.csv
+    }
+
+    class clustering_run_py <<script>> {
+      +main(): void
+      +reads: features_good.csv
+      +generates: features_with_clusters.csv
+    }
+  }
+}
+
+' =========================
+' Relationships (composition / dependencies)
+' =========================
+ProcessedWaveform *-- Waveform : raw
+
+ProcessingPipeline o-- IWaveformLoader
+ProcessingPipeline o-- IPreprocessor
+ProcessingPipeline o-- IFeatureExtractor
+ProcessingPipeline o-- IQualityGate
+
+CSVWaveformLoader ..|> IWaveformLoader
+StilbenePreprocessor ..|> IPreprocessor
+DerivativeOnsetDetector ..|> IOnsetDetector
+LinearInterpolationCrossingEstimator ..|> ICrossingTimeEstimator
+TrapezoidalIntegrator ..|> IIntegrator
+StilbeneFeatureExtractor ..|> IFeatureExtractor
+BasicQualityGate ..|> IQualityGate
+
+StilbeneFeatureExtractor o-- IOnsetDetector
+StilbeneFeatureExtractor o-- ICrossingTimeEstimator
+StilbeneFeatureExtractor o-- IIntegrator
+
+IFeatureExtractor ..> ProcessedWaveform
+IFeatureExtractor ..> WaveformFeatures
+IQualityGate ..> ValidationResult
+
+' Scripts depend on modules
+run_pipeline_py ..> read_path_list
+run_pipeline_py ..> CSVWaveformLoader
+run_pipeline_py ..> StilbenePreprocessor
+run_pipeline_py ..> StilbeneFeatureExtractor
+run_pipeline_py ..> BasicQualityGate
+run_pipeline_py ..> ProcessingPipeline
+
+parallel_run_py ..> read_path_list
+parallel_run_py ..> CSVWaveformLoader
+parallel_run_py ..> StilbenePreprocessor
+parallel_run_py ..> StilbeneFeatureExtractor
+parallel_run_py ..> BasicQualityGate
+
+clustering_run_py ..> KMeansClusterer
+clustering_run_py ..> ModelSelector
+clustering_run_py ..> ClusteringPlotter
+
+@enduml
